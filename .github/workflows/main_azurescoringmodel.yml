@@ -60,7 +60,7 @@ jobs:
     needs: build
     environment:
       name: 'production'
-      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+      url: https://scoringmodeloc.azurewebsites.net/
 
     steps:
       - name: Download artifact from build job
