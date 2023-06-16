@@ -1,4 +1,4 @@
 #!/bin/sh
 apt update
 apt-get install -y libgomp1
-gunicorn main:app
+gunicorn -k uvicorn.workers.UvicornWorker main:app
