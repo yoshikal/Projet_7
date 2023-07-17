@@ -1,6 +1,9 @@
 import streamlit as st 
 import json
 import pandas as pd
+import numpy as np
+import joblib
+import requests
 import streamlit.components.v1 as components
 from pandas.api.types import (
     is_categorical_dtype,
@@ -8,16 +11,25 @@ from pandas.api.types import (
     is_numeric_dtype,
     is_object_dtype,
 )
+import plotly.graph_objects as go
+import time
+import shap
+best_clf = joblib.load('pkl/LGBM.pkl')
 
-st.title("Scoring crédit")
+@st.cache_data
+def fetch_data():
 
-def show_clients(file): 
-    json_file = json.load(file)
-    #st.dataframe(json_file)
+    sample_nrows = 10000
 
-    json_file = pd.DataFrame.from_dict(json_file)
+    #load data
+    sample_df = pd.read_csv('data/application_test.csv', nrows=50, index_col='SK_ID_CURR')
+    float_cols = [c for c in sample_df if sample_df[c].dtype == "float16"]
+    float16_cols = {c: np.float16 for c in float_cols}
+    Xtest = pd.read_csv('data/application_test.csv', engine='c', dtype=float16_cols, nrows=sample_nrows, index_col='SK_ID_CURR')
+    
+    Xtest = Xtest.replace(np.nan, '')
 
-    return json_file
+    return Xtest
 
 def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -94,11 +106,196 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+def gauge_animated_figure(score, score_threshold, frame_duration=0.1):
+    # Define the initial sscore value
+    sscore = 0
 
-uploaded_file = st.file_uploader("Choose a file", type=['json'])
+    # Create the initial Plotly figure with the sscore value
+    gaugefig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=sscore,
+        title={'text': "Score crédit"},
+        gauge={
+            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "white"},
+            'bar': {'color': "yellow"},
+            'bgcolor': "white",
+            'borderwidth': 2,
+            'bordercolor': "white",
+            'steps': [
+                {'range': [0, score_threshold], 'color': 'red'},
+                {'range': [score_threshold, 100], 'color': 'green'}
+            ],
+            'threshold': {
+                'line': {'color': "yellow", 'width': 4},
+                'thickness': 0.75,
+                'value': sscore
+            }
+        }
+    ))
+    gaugefig.update_layout(height=350)
 
-if uploaded_file is not None:
-    #show_clients(uploaded_file)
-    df = show_clients(uploaded_file)
-    st.dataframe(filter_dataframe(df))
+    # Create the Streamlit plotly_chart object with the initial Plotly figure
+    plotly_chart = st.plotly_chart(gaugefig, use_container_width=True)
 
+    # Update the sscore value in the loop and update the Plotly figure and Streamlit plotly_chart object
+    for sscore in range(1, int(score), 1):
+        gaugefig.update_traces(
+            value=sscore,
+            gauge={
+                'threshold': {
+                    'value': sscore
+                }
+            }
+        )
+        plotly_chart.plotly_chart(gaugefig, use_container_width=True)
+        time.sleep(frame_duration)
+
+    # Final: real score
+    gaugefig.update_traces(
+        value=score,
+        gauge={
+            'threshold': {
+                'value': score
+            }
+        }
+    )
+    plotly_chart.plotly_chart(gaugefig, use_container_width=True)
+
+def st_shap(plot, height=None):
+    shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
+    components.html(shap_html, height=height)
+
+def extractDigits(lst):
+    l = [el for el in lst]
+    return np.array([l])
+
+
+def main():
+    # Page config
+    st.set_page_config(page_title="Scoring credit")
+
+    #API_endpoint = "http://127.0.0.1:8000/clients_pretrait"
+    API_endpoint = "https://scoringmodeloc.azurewebsites.net/clients_pretrait"
+
+    # Fetch data
+    Xtrain = fetch_data()
+
+
+
+    # Dashboard structure
+    st.title("Scoring crédit")
+
+    tab1, tab3, tab4 = st.tabs(['Visualiser le dataframe',
+                               'Visualiser le score',
+                               'Comparer les données d\'un client à un autre'])
+    
+    ########## Sidebar select client ##########
+    #print(Xtrain.index)
+    clist = ['Client ' + str(x + 1) for x in Xtrain.index]
+    clist = ['<Sélectionnez un client>'] + clist
+    client_id = clist[0]  # default
+    score = 0
+    client_id = st.sidebar.selectbox('Sélectionnez le client (ou entrez son identifiant)', clist, key=1000)
+    if client_id == clist[0]:
+        pass
+    else:
+        # Client data
+        data_sample = Xtrain.iloc[[clist.index(client_id) - 1]]
+        data_sample = data_sample.reset_index(drop=True)
+        gender = data_sample['CODE_GENDER'].apply(lambda x: 'M' if x == 1.0 else 'F')
+
+
+        # Display basic client data
+        st.sidebar.subheader('Données de base')
+        st.sidebar.metric('Genre', '%s' % gender.values[0])
+        st.sidebar.metric('Age', '%d ans' % np.ceil(-1 * data_sample['DAYS_BIRTH'] / 365.25))
+        st.sidebar.metric('Revenus', '{:,}$'.format(int(data_sample['AMT_INCOME_TOTAL'].values[0])).replace(',', ' '))
+        st.sidebar.metric("Nombre d'enfants", '%d' % data_sample['CNT_CHILDREN']) 
+
+
+    with tab1:
+        st.dataframe(filter_dataframe(Xtrain))
+
+    with tab3:
+            if client_id == clist[0]:
+                st.write('_Veuillez sélectionner un des clients dans le menu de la barre latérale_')
+            else:
+                col1, col2 = st.columns([0.5, 1])
+            
+                with col1:
+                    predict_btn = st.button('Calcul du score', type='primary')
+
+                    score_threshold = st.slider('Seuil de décision', min_value=0, max_value=100, value=int(80), step=1,
+                                            format='%d')
+
+                if predict_btn:
+
+                    data_sample = data_sample.iloc[0]
+
+                    #print(data_sample)
+                    #print(data_sample.to_dict())
+
+                    response = requests.post(API_endpoint, json=data_sample.to_dict())
+
+                    #print(response.json())
+                    #print(response.json().get("predict_proba"))
+                    #pred = response.json()[0]
+
+                    pred = response.json().get("predict_proba")
+
+                    score = (1 - pred) * 100
+
+                    col1, col2 = st.columns([1, 1])
+
+                    with col1:
+                        gauge_animated_figure(score, 50, frame_duration=0.05)
+
+                        with col2:
+
+                            st.sidebar.metric('Score :', value=('%d/100' % score))
+                            if score < score_threshold:
+                                st.markdown(
+                                    '<h1 style="text-align:center;color:red;font-weight:700;font-size:26px">Risque de défaut élevé.  \n\nRecommandation : refuser le crédit.</h1>',
+                                    unsafe_allow_html=True)
+                            elif score >= score_threshold:
+                                st.markdown(
+                                    '<h1 style="text-align:center;color:green;font-weight:700;font-size:26px">Risque de défaut faible.  \n\nRecommandation : accorder le crédit.</h1>',
+                                    unsafe_allow_html=True)
+                            # st.balloons()
+                            st.write("<center>Probabilité de défaut de remboursement : %.01f%%</center>" % (pred * 100), unsafe_allow_html=True)
+
+                    #forceplot
+                    X = response.json().get("X")
+                    #print(X)
+                    X  = json.loads(X)
+                    X = list(X["0"].values())
+                    X = extractDigits(X)
+                    print(X)
+
+                    Xcol = response.json().get("Xcol")
+                    Xcol  = json.loads(Xcol)
+                    Xcol = list(Xcol["columns"])
+                    #print(Xcol)
+                    
+                    #best_estimator = response.json().get("best_estimator")
+                    #print(best_estimator)
+
+                    best_estimator = best_clf.best_estimator_
+                    explainer = shap.TreeExplainer(best_estimator)
+                    shap_values = explainer.shap_values(X)
+                    st_shap(shap.force_plot(explainer.expected_value[1], shap_values[1][0,:], Xcol))
+
+
+
+        
+
+
+        
+
+
+
+
+
+
+if __name__ == '__main__':
+    main()
