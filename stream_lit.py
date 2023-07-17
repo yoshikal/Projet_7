@@ -22,10 +22,10 @@ def fetch_data():
     sample_nrows = 10000
 
     #load data
-    sample_df = pd.read_csv('data/application_test.csv', nrows=50, index_col='SK_ID_CURR')
+    sample_df = pd.read_csv('application_test.csv', nrows=50, index_col='SK_ID_CURR')
     float_cols = [c for c in sample_df if sample_df[c].dtype == "float16"]
     float16_cols = {c: np.float16 for c in float_cols}
-    Xtest = pd.read_csv('data/application_test.csv', engine='c', dtype=float16_cols, nrows=sample_nrows, index_col='SK_ID_CURR')
+    Xtest = pd.read_csv('application_test.csv', engine='c', dtype=float16_cols, nrows=sample_nrows, index_col='SK_ID_CURR')
     
     Xtest = Xtest.replace(np.nan, '')
 
