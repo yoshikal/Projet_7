@@ -1,11 +1,5 @@
-streamlit
-json
-pandas
+streamlit==1.23.1
+pandas==1.4.4
 numpy
 joblib
-requests
-streamlit.components.v1
-pandas.api.types
-plotly.graph_objects
-time
-shap
+shap==0.41.0
