@@ -4,7 +4,7 @@ import os
 
 API_URL = os.environ.get("API_URL")
 
-def pytest_api_prediction():
+def test_api_prediction():
 
     print('Reading test data')
     # Load the data sample from the CSV file
