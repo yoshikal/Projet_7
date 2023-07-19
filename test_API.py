@@ -8,7 +8,7 @@ def test_api_prediction():
 
     print('Reading test data')
     # Load the data sample from the CSV file
-    data_sample = pd.read_csv("data_sample.csv", index_col='SK_ID_CURR')
+    data_sample = pd.read_csv("data_sample.csv")
     print(data_sample.index) 
 
     data_sample = data_sample.reset_index(drop=True)
