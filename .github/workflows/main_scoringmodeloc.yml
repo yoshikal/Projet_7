@@ -61,3 +61,8 @@ jobs:
           app-name: 'ScoringModelOC'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_A3833DEDC5E64A058E1055C11697AC8F }}
+
+      - name: Run API unittest
+        env:
+          API_URL: https://scoringmodeloc.azurewebsites.net/clients_pretrait
+        run: pytest pytest_API.py
