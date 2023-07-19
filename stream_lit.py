@@ -14,6 +14,8 @@ from pandas.api.types import (
 import plotly.graph_objects as go
 import time
 import shap
+import plotly.figure_factory as ff
+import plotly.express as px
 best_clf = joblib.load('pkl/LGBM.pkl')
 
 @st.cache_data
@@ -169,6 +171,81 @@ def extractDigits(lst):
     l = [el for el in lst]
     return np.array([l])
 
+def show_client_data(data_client, data_group, varlist):
+    theme_plotly = None  # None or 'streamlit'
+
+    cols = st.columns(1)
+    for i in range(len(cols)):
+        with cols[i]:
+            options = ['<Sélectionnez une variable>'] + varlist
+            var = st.selectbox(f'Sélectionnez la variable à visualiser', options, key=i)
+            if var != options[0]:
+
+                # === Distribution plot, for continuous variables
+                if data_group[var].nunique() > 2:
+                    
+                    hist_data = [data_group.loc[:, var]]
+                    group_labels = ['Tous statuts']
+                    colors = ['darkorange']
+                    fig = ff.create_distplot(hist_data, group_labels, colors=colors, show_hist=False, show_rug=False,
+                                             curve_type="kde", histnorm="probability")
+                    # Add client line
+                    fig.add_vline(x=data_client[var][0], line_dash='solid', line_color='yellow', line_width=3,
+                                  annotation=dict(text="Client", font_size=18, showarrow=True, arrowhead=1, ax=0,
+                                                  ay=-20, arrowcolor='white'), annotation_position='top')
+                    # Set layout
+                    # fig.update_layout(yaxis_type="log")
+                    fig.update_traces(line=dict(width=3))  # only if show_hist=False
+                    fig.update_layout(xaxis=dict(tickfont=dict(size=18)))
+                    fig.update_layout(legend=dict(orientation='h', yanchor='top', y=-0.15, xanchor='left', x=0, font=dict(size=16)))
+                    fig.update_yaxes(showticklabels=False, showgrid=False, title='Densité', title_font=dict(size=18),
+                                     tickfont=dict(size=18))
+
+                # === Bar plot, for binary variables
+                elif data_group[var].nunique() <= 2:
+                    client_val = data_client[var][0]
+
+                    # Specific labels for one variable
+                    if var == 'CODE_GENDER':
+                        val0 = 'F '
+                        val1 = 'M '
+                    else:
+                        val0 = 'Non '
+                        val1 = 'Oui '
+
+                    
+                    counts = data_group[var].value_counts()
+                    counts_df = pd.DataFrame({'value': counts.index, 'count': counts.values})
+                    fig = px.bar(counts_df, x='count', y='value', orientation='h',
+                                     color_discrete_sequence=['darkorange'])
+                    # Add client arrow
+                    fig.add_annotation(x=counts_df.loc[counts_df['value'] == client_val, 'count'].iloc[0],
+                                           y=client_val, ax=40, ay=0, text="Client", font_size=18, showarrow=True,
+                                           arrowhead=1, arrowcolor='white')
+                    # Set layout
+                    fig.update_layout(
+                        legend=dict(orientation='h', yanchor='top', y=1.15, xanchor='left', x=0, title='', font=dict(size=16)))
+                    fig.update_layout(yaxis=dict(tickmode='array', ticktext=[val0, val1], tickvals=[0, 1]))
+                    fig.update_layout(xaxis=dict(tickfont=dict(size=18)), yaxis=dict(tickfont=dict(size=18)))
+                    fig.update_xaxes(title='Nombre de clients')
+                    fig.update_yaxes(showticklabels=True, showgrid=False, title='')
+
+                # Show plot
+                fig.update_layout(height=450)
+                st.plotly_chart(fig, use_container_width=True, theme=theme_plotly)
+
+                # Show info about var and group
+                client_val = data_client[var][0]
+                group_mean = data_group[var].mean()
+                group_std = data_group[var].std()
+                group_median = data_group[var].median()
+                rows = [
+                    f'**Client**: {client_val:.02f}',
+                    f'**Moyenne groupe**: {group_mean:.02f} (+/- {group_std:.02f})',
+                    f'**Médiane groupe**: {group_median:.02f}'
+                ]
+                st.write('  \n'.join(rows))
+
 
 def main():
     # Page config
@@ -178,7 +255,8 @@ def main():
     API_endpoint = "https://scoringmodeloc.azurewebsites.net/clients_pretrait"
 
     # Fetch data
-    Xtrain = fetch_data()
+    Xtest = fetch_data()
+    varlist = sorted(Xtest.columns)
 
 
 
@@ -191,7 +269,7 @@ def main():
     
     ########## Sidebar select client ##########
     #print(Xtrain.index)
-    clist = ['Client ' + str(x + 1) for x in Xtrain.index]
+    clist = ['Client ' + str(x + 1) for x in Xtest.index]
     clist = ['<Sélectionnez un client>'] + clist
     client_id = clist[0]  # default
     score = 0
@@ -200,7 +278,7 @@ def main():
         pass
     else:
         # Client data
-        data_sample = Xtrain.iloc[[clist.index(client_id) - 1]]
+        data_sample = Xtest.iloc[[clist.index(client_id) - 1]]
         data_sample = data_sample.reset_index(drop=True)
         gender = data_sample['CODE_GENDER'].apply(lambda x: 'M' if x == 1.0 else 'F')
 
@@ -214,7 +292,7 @@ def main():
 
 
     with tab1:
-        st.dataframe(filter_dataframe(Xtrain))
+        st.dataframe(filter_dataframe(Xtest))
 
     with tab3:
             if client_id == clist[0]:
@@ -283,7 +361,16 @@ def main():
                     best_estimator = best_clf.best_estimator_
                     explainer = shap.TreeExplainer(best_estimator)
                     shap_values = explainer.shap_values(X)
+                    #print(shap_values)
                     st_shap(shap.force_plot(explainer.expected_value[1], shap_values[1][0,:], Xcol))
+
+    with tab4:
+        if client_id == clist[0]:
+            st.write('_Veuillez sélectionner un des clients dans le menu de la barre latérale_')
+        else:
+            show_client_data(data_sample, Xtest, varlist)
+
+
 
 
 
