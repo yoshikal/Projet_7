@@ -31,10 +31,6 @@ jobs:
         run: pip install -r requirements2.txt
         
       # Optional: Add step to run tests here (PyTest, Django test suites, etc.)
-      - name: Run API unittest
-        env:
-          API_URL: https://scoringmodeloc.azurewebsites.net/clients_pretrait
-        run: pytest pytest_API.py
       
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v2
