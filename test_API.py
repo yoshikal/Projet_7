@@ -8,11 +8,14 @@ def test_api_prediction():
 
     print('Reading test data')
     # Load the data sample from the CSV file
-    data_sample = pd.read_csv("data_sample.csv")
+    data_sample = pd.read_csv("data_sample.csv", index_col='SK_ID_CURR')
+    #print(data_sample)
     print(data_sample.index) 
 
     data_sample = data_sample.reset_index(drop=True)
     data_sample = data_sample.iloc[0]
+    #print(data_sample.to_dict())
+    data_sample = data_sample.fillna('')
 
     # Send a POST request to the API endpoint with the data as the request body
     response = requests.post(API_URL, json=data_sample.to_dict())
