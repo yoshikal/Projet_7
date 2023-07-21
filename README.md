@@ -3,12 +3,14 @@
 L'objectif est de développer un modèle de scoring de la probabilité de défaut de paiement d'un client pour étayer la décision d'accorder ou non un prêt à un client potentiel.
 
 ## API FastAPI
+- Code API : main.py
 - Hébergée sur Azure webapp
 - https://scoringmodeloc.azurewebsites.net/clients_pretrait
 - Entrée : une ligne du dataframe correspondant à un client ainsi que tous les pré-traitements nécessaires
 - Sortie : la prédiction en binaire, la prédiction en probabilité
 
 ## Dashboard Streamlit
+- Code Dashboard : stream_lit.py
 - Hébergée sur Azure webapp
 - https://scoringcreditoc.azurewebsites.net/
 - Fonctionnalités :
