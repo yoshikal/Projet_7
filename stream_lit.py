@@ -303,7 +303,7 @@ def main():
                 with col1:
                     predict_btn = st.button('Calcul du score', type='primary')
 
-                    score_threshold = st.slider('Seuil de décision', min_value=0, max_value=100, value=int(80), step=1,
+                    score_threshold = st.slider('Seuil de décision', min_value=0, max_value=100, value=int(45), step=1,
                                             format='%d')
 
                 if predict_btn:
