@@ -67,3 +67,5 @@ def test_api_prediction2():
     assert isinstance(prediction, float)
 
     assert prediction == 0.14280952657454374
+
+
