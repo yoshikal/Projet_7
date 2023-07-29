@@ -29,6 +29,7 @@ def test_api_prediction():
     # Parse the JSON data from the response body
     prediction = response.json().get("predict_proba")
     #print(prediction)
+    
 
     # Check that the prediction value s a float
     assert isinstance(prediction, float)
